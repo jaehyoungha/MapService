@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/web/thymeleaf/layout" xmlns="http://www.w3.org/1999/html">
+<head>
+    <meta charset="utf-8"/>
+    <title>Kakao 지도 시작하기</title>
+    <style>
+        .area {
+            position: absolute;
+            background: #fff;
+            border: 1px solid #888;
+            border-radius: 3px;
+            font-size: 12px;
+            top: -5px;
+            left: 15px;
+            padding:2px;
+        }
+
+        .center {
+            position: absolute;
+            background: #a20505;
+            border: 1px solid #1c9ae0;
+            border-radius: 3px;
+            font-size: 120px;
+
+        }
+        .map_wrap, .map_wrap * {margin:0;padding:0;font-family:'Malgun Gothic',dotum,'돋움',sans-serif;font-size:12px;}
+        .map_wrap a, .map_wrap a:hover, .map_wrap a:active{color:#000;text-decoration: none;}
+        .map_wrap {position:relative;width:100%;height:1000px;}
+        #menu_wrap {position:absolute;top:0;left:0;bottom:0;width:250px;margin:10px 0 30px 10px;padding:5px;overflow-y:auto;background:rgba(255, 255, 255, 0.7);z-index: 1;font-size:12px;border-radius: 10px;}
+        .bg_white {background:#fff;}
+        #menu_wrap hr {display: block; height: 1px;border: 0; border-top: 2px solid #5F5F5F;margin:3px 0;}
+        #menu_wrap .option{text-align: center;}
+        #menu_wrap .option p {margin:10px 0;}
+        #menu_wrap .option button {margin-left:5px;}
+    </style>
+</head>
+<body>
+<div class="map_wrap">
+    <div id="map" style="width:100%;height:100%; position:relative;overflow:hidden;"></div>
+
+    <div id="menu_wrap" class="bg_white">
+        <div class="option">
+            <div>
+                <form method="post" onsubmit="searchHospitalList();">
+                    행정구 선택 : <select id="gucode" name="gucode">
+                        <option value="11250">강동구</option>
+                        <option value="11230">강남구</option>
+                        <option value="11090">강북구</option>
+                        <option value="11160">강서구</option>
+                        <option value="11210">관악구</option>
+                        <option value="11050">광진구</option>
+                        <option value="11170">구로구</option>
+                        <option value="11180">금천구</option>
+                        <option value="11110">노원구</option>
+                        <option value="11100">도봉구</option>
+                        <option value="11060">동대문구</option>
+                        <option value="11200">동작구</option>
+                        <option value="11140">마포구</option>
+                        <option value="11130">서대문구</option>
+                        <option value="11220">서초구</option>
+                        <option value="11040">성동구</option>
+                        <option value="11080">성북구</option>
+                        <option value="11240">송파구</option>
+                        <option value="11150">양천구</option>
+                        <option value="11190">영등포구</option>
+                        <option value="11030">용산구</option>
+                        <option value="11120">은평구</option>
+                        <option value="11010">종로구</option>
+                        <option value="11020">중구</option>
+                        <option value="11070">중랑구</option>
+                    </select>
+                    <button type="submit">검색하기</button>
+                </form>
+            </div>
+        </div>
+        <hr>
+        <ul id="placesList"></ul>
+        <div id="pagination"></div>
+    </div>
+</div>
+<script src="/static/assets/js/jquery-3.6.3.min.js"></script>
+<script th:inline="javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=df6cfe4566e745885efd898d832b23f2&libraries=services"></script>
+<script th:inline="javascript">
+
+
+    var mapContainer = document.getElementById('map'),// 지도를 표시할 div
+        // 지도의 옵션
+        mapOption = {
+            center: new kakao.maps.LatLng(37.5666805, 126.9784147), // 지도의 중심좌표
+            level: 4 // 지도의 확대 레벨
+        };
+
+    var map = new kakao.maps.Map(mapContainer, mapOption), // 지도를 생성합니다
+    customOverlay = new kakao.maps.CustomOverlay({}); //커스텀 오버레이 객체 생성
+
+
+
+    // 지도 확대 축소를 제어할 수 있는  줌 컨트롤을 생성합니다
+    var zoomControl = new kakao.maps.ZoomControl();
+    map.addControl(zoomControl, kakao.maps.ControlPosition.RIGHT);
+
+
+
+
+
+    // GeoLocation을 이용해서 접속 위치를 얻어옵니다
+    // HTML5의 geolocation으로 사용할 수 있는지 확인합니다
+
+    if (navigator.geolocation) {
+
+        navigator.geolocation.getCurrentPosition(function(position) {
+
+            var lat = position.coords.latitude, // 위도
+                lon = position.coords.longitude; // 경도
+
+            var locPosition = new kakao.maps.LatLng(lat, lon), // 마커가 표시될 위치를 geolocation으로 얻어온 좌표로 생성합니다
+                message = '<div style="padding:5px;">현위치</div>'; // 인포윈도우에 표시될 내용입니다
+
+
+
+
+            // 마커와 인포윈도우를 표시합니다
+            displayMarker(locPosition, message);
+
+        });
+
+    } else { // HTML5의 GeoLocation을 사용할 수 없을때 마커 표시 위치와 인포윈도우 내용을 설정합니다
+
+        var locPosition = new kakao.maps.LatLng(33.450701, 126.570667),
+            message = 'geolocation을 사용할수 없어요..'
+
+        displayMarker(locPosition, message);
+    }
+
+    // 지도에 마커와 인포윈도우를 표시하는 함수입니다
+    function displayMarker(locPosition, message) {
+
+        // 마커를 생성합니다
+        var marker = new kakao.maps.Marker({
+            map: map,
+            position: locPosition
+        });
+
+        // 지도에 표시할 원을 생성합니다
+        var circle = new kakao.maps.Circle({
+            center : locPosition,  // 원의 중심좌표 입니다
+            radius: 1000, // 미터 단위의 원의 반지름입니다
+            strokeWeight: 5, // 선의 두께입니다
+            strokeColor: '#75B8FA', // 선의 색깔입니다
+            strokeOpacity: 1, // 선의 불투명도 입니다 1에서 0 사이의 값이며 0에 가까울수록 투명합니다
+            strokeStyle: 'dashed', // 선의 스타일 입니다
+            fillColor: '#CFE7FF', // 채우기 색깔입니다
+            fillOpacity: 0.7  // 채우기 불투명도 입니다
+        });
+
+        // 지도에 원을 표시합니다
+        circle.setMap(map);
+
+        var iwContent = message, // 인포윈도우에 표시할 내용
+            iwRemoveable = true;
+
+        // 인포윈도우를 생성합니다
+        var infowindow = new kakao.maps.InfoWindow({
+            content : iwContent,
+            removable : iwRemoveable
+        });
+
+        // 인포윈도우를 마커위에 표시합니다
+        infowindow.open(map, marker);
+
+        // 지도 중심좌표를 접속위치로 변경합니다
+        map.setCenter(locPosition);
+    }
+    // 지도가 확대 또는 축소되면 마지막 파라미터로 넘어온 함수를 호출하도록 이벤트를 등록합니다
+    kakao.maps.event.addListener(map, 'zoom_changed', function() {
+
+        // 지도의 현재 레벨을 얻어옵니다
+        var level = map.getLevel();
+
+        if (level > 5) {
+            searchHospitalList(code);
+
+
+            //행정구역 구분
+            $.getJSON("/static/SeoulGu.json", function (geojson) {
+                console.log(" 또 돈다.")
+                let data = geojson.features;
+                let coordinates = []; // 좌표 저장할 배열
+                let name = ''; // 행정 구 이름
+
+                $.each(data, function (index, val) {
+
+                    coordinates = val.geometry.coordinates;
+                    name = val.properties.name;
+                    code = val.properties.code;
+
+
+                    displayArea(coordinates, name, code);
+                })
+            })
+        } else {
+            deletePolygon(polygons)
+        }
+
+    });
+
+    // 해당 구의 병원 위치를 띄워주는 함수
+    function searchHospitalList(code) {
+        let radius = 1000;
+        let c1 = map.getCenter();
+        console.log("c1 : " + c1)
+        console.log("구 코드 : " + code)
+
+        //병원 리스트 가져오는 jQuery
+        $.ajax({
+            type: "POST",
+            url:"/searchHospital",
+            data : {
+                gucode : code
+            },
+            dataType:"json",
+            success(rList) {
+                // 반복문으로 마커 찍기
+                for (let i = 0; i <rList.length; i++) {
+                    console.log("int i : " + i)
+                    let name = rList[i].hospitalName; //병원기관명
+                    let latitude = rList[i].latitude; //위도
+                    let longitude = rList[i].longitude; // 경도
+
+                    //카카오 마커 생성에 필요한 위경도
+                    let locPosition= new kakao.maps.LatLng(latitude, longitude);
+
+                    let c2 = locPosition;
+
+                    let poly = new kakao.maps.Polyline({
+                        path: [c1, c2]
+                    });
+
+                    let dist = poly.getLength();
+
+                    if (dist < radius) {
+                        var markers = new kakao.maps.Marker({ // 마커 생성
+                            map : map,
+                            position: locPosition
+                        });
+                    }
+
+                }
+            }
+        })
+    }
+
+
+
+</script>
+<script>
+
+    let polygons=[]; // Function 안에 넣으면 배열이 비어버림.
+
+    // 행정구역 폴리곤
+    function displayArea(coordinates, name, code) {
+
+        let path = []; // 폴리곤 그려줄 path
+        let points = []; // 중심좌표 구하기 위한 지역구 좌표들
+
+        $.each(coordinates[0], function (index, coordinate) {
+            let point = new Object();
+            point.x = coordinate[1];
+            point.y = coordinate[0];
+            points.push(point);
+            path.push(new kakao.maps.LatLng(coordinate[1], coordinate[0]));
+        })
+
+        let polygon = new kakao.maps.Polygon({ // 폴리곤 생성
+            map: map,
+            path: path,
+            strokeWeight: 2,
+            strokeColor: '#004c80',
+            strokeOpacity: 0.8,
+            fillColor: '#fff',
+            fillOpacity: 0.7
+        });
+
+
+        polygons.push(polygon);
+
+
+        kakao.maps.event.addListener(polygon, 'mouseover', function(mouseEvent) {
+            polygon.setOptions({fillColor: '#09f'});
+
+            customOverlay.setContent('<div class="area">' + name + '</div>');
+
+            customOverlay.setPosition(mouseEvent.latLng);
+            customOverlay.setMap(map);
+        });
+
+        // 다각형에 mousemove 이벤트를 등록하고 이벤트가 발생하면 커스텀 오버레이의 위치를 변경합니다
+        kakao.maps.event.addListener(polygon, 'mousemove', function (mouseEvent) {
+
+            customOverlay.setPosition(mouseEvent.latLng);
+        });
+
+        // 다각형에 mouseout 이벤트를 등록하고 이벤트가 발생하면 폴리곤의 채움색을 원래색으로 변경합니다
+        // 커스텀 오버레이를 지도에서 제거합니다
+        kakao.maps.event.addListener(polygon, 'mouseout', function () {
+            polygon.setOptions({
+                fillColor: '#fff'
+            });
+            customOverlay.setMap(null);
+        });
+
+        // 다각형에 click 이벤트를 등록하고 이벤트가 발생하면 해당 지역을 확대합니다.
+        kakao.maps.event.addListener(polygon, 'click', function () {
+
+            // 현재 지도 레벨에서 2레벨 확대한 레벨
+            let level = 6
+
+            // 지도를 클릭된 폴리곤의 중앙 위치를 기준으로 확대합니다
+            map.setLevel(level, {anchor: map.getCenter(), animate: {
+                    duration: 350  // 확대 애니메이션 시간
+                }
+            });
+
+
+            searchHospitalList(code);
+
+            deletePolygon(polygons); // 폴리곤 제거
+        })
+    }
+    //centroid(트리의 중심) 알고리즘 https://lego0901.tistory.com/12
+    function centroid(points) {
+        var i, j, len, p1, p2,  f, area, x, y;
+
+        area = x = y =0;
+        len = points.length;
+        j = len -1;
+
+        for (i = 0; i < len; j = i++) {
+                p1 = points[i];
+                p2 = points[j];
+
+                f =p1.y * p2.x - p2.y * p1.x;
+                x += (p1.x + p2.x) * f;
+                y += (p1.y + p2.y) * f;
+                area += f * 3;
+        }
+        console.log(" 중심 위도 : " + x / area + " 중심 경도 : " + y / area)
+        return new kakao.maps.LatLng(x / area, y / area);
+    }
+    // 폴리곤 삭제 함수
+    function deletePolygon(polygons) {
+        for (let i =0; i < polygons.length; i++) {
+            polygons[i].setMap(null);
+        }
+        polygons = [];
+    }
+</script>
+</body>
+</html>
